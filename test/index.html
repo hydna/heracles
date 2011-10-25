@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+  <head><title>This is the index</title></head>
+  <body>
+    <script>
+      function sendjsonevent() {
+        __hydna.trackEvent('{"type": "fb", "message": "hello world"}');
+      }
+    </script>
+    <a href="file2.html">Goto file2</a>&nbsp;&nbsp;
+    <a href="#" onclick="__hydna.trackEvent('hello world')">Hello world event</a>&nbsp;&nbsp;
+    <a href="#" onclick="sendjsonevent()">JSON event</a>
+    
+    <script type="text/javascript">
+    var anaHost = (("https:" == document.location.protocol) ? "https://" : "http://");
+    document.write(unescape("%3Cscript src='" + anaHost + "127.0.0.1:8080/t.js' type='text/javascript'%3E%3C/script%3E"));
+    </script> 
+    <script type="text/javascript">
+    // try {
+    __atlasio.init("AIO-01000001");
+    __atlasio.trackPageview();
+    // } catch(err) {}</script>
+    <noscript><img src="http://127.0.0.1:8080/s/?_id=AIO-01000001"></noscript>
+  </body>
+</html>

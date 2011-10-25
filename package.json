@@ -1,0 +1,30 @@
+{
+	"name": "heracles",
+	"version": "1.0.0",
+	"description": "Tracking server for Atlas.io",
+	"keywords": ["heracles", "tracking"],
+	"homepage": "https://github.com/hydna/hermes",
+	"author": "Hydna AB <info@hydna.com> (http://www.hydna.com/)",
+  "dependencies" : {
+    "redis": "0.6.7",
+    "ua-parser": "0.2.3",
+    "hydna": ">=1.0.0",
+		"uglify-js": ">=1.1.1",
+		"geoip": ">=0.4.4"
+  },
+  "main": "./lib",
+  "bin": {
+		"heracles": "./bin/heracles"
+	},
+	"directories": {
+	  "lib": "./lib"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/hydna/heracles.git"
+	},
+	"os": ["macos", "linux"],
+	"engines": {
+		"node": ">=0.5.9"
+	}
+}

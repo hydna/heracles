@@ -1,0 +1,183 @@
+#!/usr/bin/env node
+// 
+//        Copyright 2011 Hydna AB. All rights reserved.
+//
+//  Redistribution and use in source and binary forms, with or without 
+//  modification, are permitted provided that the following conditions 
+//  are met:
+//
+//    1. Redistributions of source code must retain the above copyright 
+//       notice, this list of conditions and the following disclaimer.
+//
+//    2. Redistributions in binary form must reproduce the above copyright 
+//       notice, this list of conditions and the following disclaimer in the 
+//       documentation and/or other materials provided with the distribution.
+//
+//  THIS SOFTWARE IS PROVIDED BY HYDNA AB ``AS IS'' AND ANY EXPRESS OR IMPLIED
+//  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+//  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+//  EVENT SHALL HYDNA AB OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+//  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT 
+//  NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+//  USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+//  ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+//  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+//  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+//  The views and conclusions contained in the software and documentation are
+//  those of the authors and should not be interpreted as representing 
+//  official policies, either expressed or implied, of Hydna AB.
+//
+
+var Server              = require("http").Server;
+
+
+// Internal variables
+var workers             = [];
+
+var BANNER              = "usage: heracles domains.json [options]";
+var SWITCHES            = [
+  ["-h", "--help",        "Show this help section"],
+  ["-v", "--verbose",     "Verbose mode"],
+  ["-d", "--debug",       "Debug mode"],
+  [      "--version",     "Prints current version"],
+  [      "--port=PORT",   "Server port"],
+  [      "--workers=NO",  "Defaults to total number of CPU's"],
+  [      "--tracker=PATH","Path to tracker-js, defaults to 'public/tracker.js"],
+  [      "--name=NAME",   "Name of server"],
+  [      "--geodb=PATH",  "Path to MaxMind geo ip database"],
+  [      "--id=ID",       "ID of server, if used in clusters"]
+];
+
+
+process.title = "heracles (node)";
+
+
+
+function main(master) {
+  var createParser = require("../lib/optparse").createParser;
+  var init = require("../lib/modules").init;
+  var dispatch = require("../lib/dispatch").dispatch;
+  var existsSync = require("path").existsSync;
+  var resolve = require("path").resolve;
+  var server = new Server();
+  var domainspath;
+  var parser;
+  var child;
+  var opts;
+  var port;
+
+  parser = createParser(SWITCHES, BANNER);
+  opts = parser.parse(process.argv.slice(2));
+
+  if (!(domainspath = parser.args[0]) || !existsSync(domainspath)) {
+    console.error("expected -- domains.json");
+    process.exit(1);
+    return;
+  }
+
+  if (opts.help) {
+    console.log(parser.help());
+    process.exit(1);
+    return;
+  }
+
+  if (opts.version) {
+    console.log(require("../package.json").version);
+    process.exit(1);
+    return;
+  }
+
+  if (master && (!(port = parseInt(opts.port)) || isNaN(port))) {
+    console.error("expected -- port");
+    process.exit(1);
+    return;
+  }
+
+  opts.geodb = opts.geodb ? resolve(opts.geodb) : null;
+
+  server.on("request", dispatch);
+
+  process.on("message", function message(msg, handle) {
+    switch (msg.op) {
+      case "listen":
+        server.listen(handle);
+        break;
+      case "source":
+        source(true);
+        break;
+    }
+  });
+
+  function source(ignoreBroadcast) {
+    var source = require("../lib/domain").source;
+    try {
+      source(domainspath);
+    } catch (err) {
+      console.log(err.stack);
+      return false;
+    }
+
+    if (!ignoreBroadcast) {
+      workers.forEach(function(worker) {
+        worker.send({ op: "source" });
+      });
+    }
+
+    return true;
+  }
+
+  process.on("SIGUSR1", source);
+
+  opts.debug && console.log("Initializing modules");
+
+  init(opts, function(err) {
+    if (err) {
+      console.error(err);
+      process.exit(1);
+      return;
+    }
+
+    if (!source(true)) {
+      process.exit(1);
+      return;
+    }
+
+    if (master) {
+      server.listen(opts.port, function(err) {
+        opts.verbose && console.log("Listening on %s", opts.port);
+        fork(server, domainspath, opts);
+      });
+    }
+  });
+}
+
+
+function fork(server, domainsPath, opts) {
+  var fork = require("child_process").fork;
+  var cpus = require("os").cpus().length;
+  var noOfWorkers = cpus - 1;
+  var args = [];
+  var worker;
+
+  if ("workers" in opts) {
+    noOfWorkers = parseInt(opts.workers);
+  }
+
+  ("verbose" in opts) && args.push("--verbose");
+  ("debug" in opts) && args.push("--debug");
+  ("tracker" in opts) && args.push("--tracker=" + opts.tracker);
+  ("name" in opts) && args.push("--name=" + opts.name);
+  ("id" in opts) && args.push("--id=" + opts.id);
+
+  args.unshift(domainsPath);
+
+  for (var i = 0; i < noOfWorkers; i++) {
+    worker = fork(__filename, args);
+    worker.send({ op: "listen" }, server._handle);
+    workers.push(worker);
+  }
+}
+
+
+require.main == module && main(!(typeof process.send == "function"));
