@@ -38,7 +38,7 @@ var resolve             = require("path").resolve;
 var City                = require("geoip").City;
 
 var createParser        = require("../lib/optparse").createParser;
-var createDomains       = require("../lib/domain").createDomains;
+var createSites         = require("../lib/site").createSites;
 var createSessions      = require("../lib/session").createSessions;
 var createDispatcher    = require("../lib/dispatch").createDispatcher;
 
@@ -51,7 +51,7 @@ var file                = require("../lib/helpers").file;
 var methodNotAllowed    = require("../lib/helpers").methodNotAllowed;
 
 
-var BANNER              = "usage: heracles domains.json [options]";
+var BANNER              = "usage: heracles sites.json [options]";
 var SWITCHES            = [
   ["-h", "--help",        "Show this help section"],
   ["-v", "--verbose",     "Verbose mode"],
@@ -85,11 +85,11 @@ process.title = "heracles";
 function main () {
   var dispatcher;
   var sessions;
-  var domainspath;
+  var sitespath;
   var scriptpath;
   var lookupdb;
   var workers;
-  var domains;
+  var sites;
   var worker;
   var parser;
   var opts;
@@ -99,8 +99,8 @@ function main () {
   parser = createParser(SWITCHES, BANNER);
   opts = parser.parse(process.argv.slice(2));
 
-  if (!(domainspath = parser.args[0]) || !existsSync(domainspath)) {
-    console.error("expected -- domains.json");
+  if (!(sitespath = parser.args[0]) || !existsSync(sitespath)) {
+    console.error("expected -- sites.json");
     process.exit(1);
     return;
   }
@@ -141,8 +141,8 @@ function main () {
       }
 
       dispatcher = createDispatcher(opts.name || DEFAULT_SERVER_NAME);
-      dispatcher.addHandler("/domains", sourceHandler(domainspath,
-                                                      domains,
+      dispatcher.addHandler("/sites", sourceHandler(sitespath,
+                                                      sites,
                                                       opts.rpcsecret));
       dispatcher.listen(rpcport);
     }
@@ -185,21 +185,21 @@ function main () {
       scriptpath = null;
     }
 
-    domains = createDomains();
-    domains.source(domainspath);
+    sites = createSites();
+    sites.source(sitespath);
 
     sessions = createSessions(opts.id || "1", lookupdb);
 
     dispatcher = createDispatcher(opts.name || DEFAULT_SERVER_NAME);
-    dispatcher.addHandler("/s", sessionHandler(domains, sessions));
-    dispatcher.addHandler("/s/", sessionHandler(domains, sessions));
+    dispatcher.addHandler("/s", sessionHandler(sites, sessions));
+    dispatcher.addHandler("/s/", sessionHandler(sites, sessions));
     dispatcher.addHandler("/t.js", scriptHandler(scriptpath));
     dispatcher.listen(port);
 
     process.on("message", function message(msg, handle) {
       switch (msg.cmd) {
         case "source":
-          domains.source(true);
+          sites.source(true);
           break;
       }
     });
@@ -253,7 +253,7 @@ function scriptHandler (path, debug) {
 }
 
 
-function sessionHandler (domains, sessions) {
+function sessionHandler (sites, sessions) {
 
   return function (req, res) {
     var address = req.connection.remoteAddress;
@@ -261,15 +261,15 @@ function sessionHandler (domains, sessions) {
     var query = req.query;
     var session;
     var result;
-    var domain;
+    var site;
 
-    domain = domains.getDomain(referer, query._id);
+    site = sites.getSite(referer, query._id);
 
-    if (!domain) {
+    if (!site) {
       return badRequest(req, res);
     }
 
-    session = sessions.getSession(domain, req, query);
+    session = sessions.getSession(site, req, query);
 
     if (!session) {
       return badRequest(req, res);
@@ -303,7 +303,7 @@ function sessionHandler (domains, sessions) {
 }
 
 
-function sourceHandler (path, domains, secret) {
+function sourceHandler (path, sites, secret) {
   return function (req, res) {
     var buffer = [];
 

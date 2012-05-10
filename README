@@ -8,6 +8,7 @@ Heracles, and dependencies, is installed via NPM. Just run NPM from the root dir
 
     $ npm install
 
+Please note that Redis has to be installed in order to track history.
 
 How to run
 ----------
@@ -17,12 +18,39 @@ The command `heracles` is automatically available after the install process. You
     $ heracles --help
 
 
-A `domains.json` file and port **must** be issued at startup:
+A `sites.json` file and port **must** be issued at startup:
 
-    $ heracles domains.json --port=80
+    $ heracles sites.json --port=80
 
 
 This config enables geo-ip-tracking and RPC:
 
 
-    $ heracles domains.json --port=80 --geodb=db/GeoIPCity.dat --rpcport=35253 --rpcsecret=SECRET
+    $ heracles sites.json --port=80 --geodb=db/GeoIPCity.dat --rpcport=35253 --rpcsecret=SECRET
+    
+    
+    
+Format for `sites.json`
+-------------------------
+
+The `sites.json` file must have the following format:
+
+      {
+        "sites"     : [
+          "SITE_UUID": {
+            "name"      : "Example Account",
+            "patterns"  : ["http://*.mydomain.com", "http://www.mydomain.net"],
+            "hydna"     : "mydomain.hydna.net/100",
+            "database"  : "127.0.0.1:6379",
+            "secret"    : "super-secret"
+          }
+        ]
+      }
+
+The fields are:
+
+- `name` the name of the site. 
+- `patterns` patterns that should match the referrer
+- `hydna` the hydna URL
+- `database` address to the redis database
+- `secret` a secret key that is used to hash server-side sessions
