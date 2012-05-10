@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 
-//        Copyright 2011 Hydna AB. All rights reserved.
+//        Copyright 2011-2012 Hydna AB. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without 
 //  modification, are permitted provided that the following conditions 
@@ -29,19 +29,38 @@
 //  official policies, either expressed or implied, of Hydna AB.
 //
 
-var Server              = require("http").Server;
+var cluster             = require("cluster");
+var readFileSync        = require("fs").readFileSync;
+var writeFileSync       = require("fs").writeFileSync;
+var existsSync          = require("path").existsSync;
+var resolve             = require("path").resolve;
 
+var City                = require("geoip").City;
 
-// Internal variables
-var workers             = [];
+var createParser        = require("../lib/optparse").createParser;
+var createDomains       = require("../lib/domain").createDomains;
+var createSessions      = require("../lib/session").createSessions;
+var createDispatcher    = require("../lib/dispatch").createDispatcher;
+
+var log                 = require("../lib/log");
+
+var ok                  = require("../lib/helpers").ok;
+var notFound            = require("../lib/helpers").notFound;
+var badRequest          = require("../lib/helpers").badRequest;
+var file                = require("../lib/helpers").file;
+var methodNotAllowed    = require("../lib/helpers").methodNotAllowed;
+
 
 var BANNER              = "usage: heracles domains.json [options]";
 var SWITCHES            = [
   ["-h", "--help",        "Show this help section"],
   ["-v", "--verbose",     "Verbose mode"],
   ["-d", "--debug",       "Debug mode"],
+  [      "--silent",      "Silent mode"],
   [      "--version",     "Prints current version"],
   [      "--port=PORT",   "Server port"],
+  [      "--rpcport=PORT","RPC Server port"],
+  [      "--rpcsecret=PORT","RPC Sercret"],
   [      "--workers=NO",  "Defaults to total number of CPU's"],
   [      "--tracker=PATH","Path to tracker-js, defaults to 'public/tracker.js"],
   [      "--name=NAME",   "Name of server"],
@@ -49,23 +68,33 @@ var SWITCHES            = [
   [      "--id=ID",       "ID of server, if used in clusters"]
 ];
 
+var DEFAULT_SERVER_NAME = "heracles/" + require("../package.json").version;
 
-process.title = "heracles (node)";
+// Internal variables
+var workers             = {};
+
+
+// Internal constants
+var VISIT_TIMEOUT       = 20 * 60000; // 20 min
+
+
+process.title = "heracles";
 
 
 
-function main(master) {
-  var createParser = require("../lib/optparse").createParser;
-  var init = require("../lib/modules").init;
-  var dispatch = require("../lib/dispatch").dispatch;
-  var existsSync = require("path").existsSync;
-  var resolve = require("path").resolve;
-  var server = new Server();
+function main () {
+  var dispatcher;
+  var sessions;
   var domainspath;
+  var scriptpath;
+  var lookupdb;
+  var workers;
+  var domains;
+  var worker;
   var parser;
-  var child;
   var opts;
   var port;
+  var rpcport;
 
   parser = createParser(SWITCHES, BANNER);
   opts = parser.parse(process.argv.slice(2));
@@ -88,96 +117,229 @@ function main(master) {
     return;
   }
 
-  if (master && (!(port = parseInt(opts.port)) || isNaN(port))) {
+  if ((!(port = parseInt(opts.port)) || isNaN(port))) {
     console.error("expected -- port");
     process.exit(1);
     return;
   }
 
-  opts.geodb = opts.geodb ? resolve(opts.geodb) : null;
+  log.debugMode = "debug" in opts;
+  log.silentMode = "silent" in opts;
 
-  server.on("request", dispatch);
+  if (cluster.isMaster) {
 
-  process.on("message", function message(msg, handle) {
-    switch (msg.op) {
-      case "listen":
-        server.listen(handle);
-        break;
-      case "source":
-        source(true);
-        break;
-    }
-  });
+    if ("rpcport" in opts) {
 
-  function source(ignoreBroadcast) {
-    var source = require("../lib/domain").source;
-    try {
-      source(domainspath);
-    } catch (err) {
-      console.log(err.stack);
-      return false;
-    }
+      if ((!(rpcport = parseInt(opts.rpcport)) || isNaN(rpcport))) {
+        console.error("invalid rpcport");
+        process.exit(1);
+        return;
+      }
 
-    if (!ignoreBroadcast) {
-      workers.forEach(function(worker) {
-        worker.send({ op: "source" });
-      });
+      if ("rpcsecret" in opts == false) {
+        throw new Error("Expected option 'rpcsecret' when RPC is enabled");
+      }
+
+      dispatcher = createDispatcher(opts.name || DEFAULT_SERVER_NAME);
+      dispatcher.addHandler("/domains", sourceHandler(domainspath,
+                                                      domains,
+                                                      opts.rpcsecret));
+      dispatcher.listen(rpcport);
     }
 
-    return true;
-  }
 
-  process.on("SIGUSR1", source);
+    workers = require("os").cpus().length;
 
-  opts.debug && console.log("Initializing modules");
-
-  init(opts, function(err) {
-    if (err) {
-      console.error(err);
-      process.exit(1);
-      return;
+    if ("workers" in opts) {
+      workers = parseInt(opts.workers);
     }
 
-    if (!source(true)) {
-      process.exit(1);
-      return;
+    for (var i = 0; i < workers; i++) {
+      worker = cluster.fork();
+      workers[worker.pid] = worker;
     }
 
-    if (master) {
-      server.listen(opts.port, function(err) {
-        opts.verbose && console.log("Listening on %s", opts.port);
-        fork(server, domainspath, opts);
-      });
+    cluster.on("death", function (target) {
+      var worker;
+      delete workers[target.id];
+      worker = cluster.fork();
+      workers[worker.pid] = worker;
+    });
+
+
+  } else {
+
+    if ("geodb" in opts) {
+      try {
+        lookupdb = new City(resolve(opts.geodb));
+      } catch (err) {
+        lookupdb = new FakeLookupDB();
+      }
+    } else {
+      lookupdb = new FakeLookupDB();
     }
-  });
-}
 
+    scriptpath = opts.tracker || resolve(__dirname, "../public/tracker.js");
 
-function fork(server, domainsPath, opts) {
-  var fork = require("child_process").fork;
-  var cpus = require("os").cpus().length;
-  var noOfWorkers = cpus - 1;
-  var args = [];
-  var worker;
+    if (!opts.debug) {
+      scriptpath = null;
+    }
 
-  if ("workers" in opts) {
-    noOfWorkers = parseInt(opts.workers);
-  }
+    domains = createDomains();
+    domains.source(domainspath);
 
-  ("verbose" in opts) && args.push("--verbose");
-  ("debug" in opts) && args.push("--debug");
-  ("tracker" in opts) && args.push("--tracker=" + opts.tracker);
-  ("name" in opts) && args.push("--name=" + opts.name);
-  ("id" in opts) && args.push("--id=" + opts.id);
+    sessions = createSessions(opts.id || "1", lookupdb);
 
-  args.unshift(domainsPath);
+    dispatcher = createDispatcher(opts.name || DEFAULT_SERVER_NAME);
+    dispatcher.addHandler("/s", sessionHandler(domains, sessions));
+    dispatcher.addHandler("/s/", sessionHandler(domains, sessions));
+    dispatcher.addHandler("/t.js", scriptHandler(scriptpath));
+    dispatcher.listen(port);
 
-  for (var i = 0; i < noOfWorkers; i++) {
-    worker = fork(__filename, args);
-    worker.send({ op: "listen" }, server._handle);
-    workers.push(worker);
+    process.on("message", function message(msg, handle) {
+      switch (msg.cmd) {
+        case "source":
+          domains.source(true);
+          break;
+      }
+    });
   }
 }
 
 
-require.main == module && main(!(typeof process.send == "function"));
+function FakeLookupDB () {}
+
+FakeLookupDB.prototype.lookup = function (addr, C) {
+  process.nextTick(function () {
+    return C(null, {
+      latitude: 0,
+      longitude: 0,
+    });
+  });
+};
+
+
+function scriptHandler (path, debug) {
+  var trackerjs;
+  var jsp;
+  var pro;
+  var content;
+  var ast;
+
+  if (!path) {
+    return notFound;
+  }
+
+  content = readFileSync(path, "utf8");
+
+  try {
+    jsp = require("uglify-js").parser;
+    pro = require("uglify-js").uglify;
+  } catch (err) {
+  }
+
+  if (debug || !jsp) {
+    trackerjs = new Buffer(content);
+  } else {
+    ast = jsp.parse(content);
+    ast = pro.ast_mangle(ast);
+    ast = pro.ast_squeeze(ast);
+    trackerjs = new Buffer(pro.gen_code(ast));
+  }
+
+  return function (req, res) {
+    return file(req, res, trackerjs, "text/javascript");
+  };
+}
+
+
+function sessionHandler (domains, sessions) {
+
+  return function (req, res) {
+    var address = req.connection.remoteAddress;
+    var referer = req.headers["referer"];
+    var query = req.query;
+    var session;
+    var result;
+    var domain;
+
+    domain = domains.getDomain(referer, query._id);
+
+    if (!domain) {
+      return badRequest(req, res);
+    }
+
+    session = sessions.getSession(domain, req, query);
+
+    if (!session) {
+      return badRequest(req, res);
+    }
+
+    function endrequest() {
+      if (query._a) {
+        session.dispatch(referer, query._a || "");
+      } else if (query._d == 1) {
+        session.navigateFrom();
+      } else {
+        session.navigateTo(referer, query.r, query.t);
+      }
+
+      if (session.serversession) {
+        session.updateTimestamp();
+        res.setHeader("Set-Cookie", session.getCookieString());
+      }
+
+      return ok(req, res);
+    }
+
+    if (session.lastvisit == 0) {
+      session.init(address, query.r || "", endrequest);
+    } else if (session.lastvisit + VISIT_TIMEOUT < Date.now()) {
+      session.heartbeat(address, query.r || "", endrequest);
+    } else {
+      endrequest();
+    }
+  };
+}
+
+
+function sourceHandler (path, domains, secret) {
+  return function (req, res) {
+    var buffer = [];
+
+    if (req.method !== "POST") {
+      return methodNotAllowed(req, res);
+    }
+
+    if (req.headers["x-token"] !== secret) {
+      return badRequest(req, res);
+    }
+
+    req.on("data", function (chunk) {
+      buffer.push(chunk.toString());
+    });
+
+    req.on("end", function () {
+      var source = buffer.join("");
+
+      try {
+        JSON.parse(source);
+        writeFileSync(path, source, "utf8")
+      } catch (err) {
+        console.error(err.stack);
+        return badRequest(req, res);
+      }
+
+      for (var id in workers) {
+        workers[id].send({ cmd: "source" });
+      }
+
+      return ok(req, res);
+    });
+  };
+}
+
+
+if (require.main == module) {
+  main();
+}

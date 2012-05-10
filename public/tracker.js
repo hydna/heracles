@@ -173,7 +173,6 @@
 	}
 
 	function onunload() {
-	  console.log("onunload");
 	  if (!unloaded) {
 	    unloaded = true;
 	    track({_d: 1});

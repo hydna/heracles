@@ -12,7 +12,7 @@
 		"uglify-js": ">=1.1.1",
 		"geoip": ">=0.4.4"
   },
-  "main": "./lib",
+  "main": "./lib ",
   "bin": {
 		"heracles": "./bin/heracles"
 	},
