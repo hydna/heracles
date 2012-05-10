@@ -1,0 +1,28 @@
+Heracles
+========
+
+
+How to install
+--------------
+Heracles, and dependencies, is installed via NPM. Just run NPM from the root directory:
+
+    $ npm install
+
+
+How to run
+----------
+
+The command `heracles` is automatically available after the install process. You can see all flags by issuing the command with the `--help` flag:
+
+    $ heracles --help
+
+
+A `domains.json` file and port **must** be issued at startup:
+
+    $ heracles domains.json --port=80
+
+
+This config enables geo-ip-tracking and RPC:
+
+
+    $ heracles domains.json --port=80 --geodb=db/GeoIPCity.dat --rpcport=35253 --rpcsecret=SECRET
