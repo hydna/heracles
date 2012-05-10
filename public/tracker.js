@@ -191,4 +191,4 @@
 	  }
 	}
 
-})(window.__atlasio = {});
+})(window.atlasio = {});
