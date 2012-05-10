@@ -36,7 +36,7 @@ Format for `sites.json`
 The `sites.json` file must have the following format:
 
       {
-        "sites"     : [
+        "sites"     : {
           "SITE_UUID": {
             "name"      : "Example Account",
             "patterns"  : ["http://*.mydomain.com", "http://www.mydomain.net"],
@@ -44,7 +44,7 @@ The `sites.json` file must have the following format:
             "database"  : "127.0.0.1:6379",
             "secret"    : "super-secret"
           }
-        ]
+        }
       }
 
 The fields are:
