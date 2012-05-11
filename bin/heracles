@@ -88,7 +88,7 @@ function main () {
   var sitespath;
   var scriptpath;
   var lookupdb;
-  var workers;
+  var noworkers;
   var sites;
   var worker;
   var parser;
@@ -148,16 +148,28 @@ function main () {
     }
 
 
-    workers = require("os").cpus().length;
+    noworkers = require("os").cpus().length;
 
     if ("workers" in opts) {
-      workers = parseInt(opts.workers);
+      noworkers = parseInt(opts.workers);
     }
 
-    for (var i = 0; i < workers; i++) {
+    for (var i = 0; i < noworkers; i++) {
       worker = cluster.fork();
       workers[worker.pid] = worker;
     }
+
+    function shutdown () {
+      cluster.removeAllListeners("death");
+      for (var id in workers) {
+        workers[id].kill("SIGKILL");
+      }
+      workers = {};
+      process.exit(0);
+    }
+
+    process.on("SIGINT", shutdown);
+    process.on("SIGQUIT", shutdown);
 
     cluster.on("death", function (target) {
       var worker;
@@ -199,7 +211,7 @@ function main () {
     process.on("message", function message(msg, handle) {
       switch (msg.cmd) {
         case "source":
-          sites.source(true);
+          sites.source(sitespath);
           break;
       }
     });
