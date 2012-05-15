@@ -8,7 +8,7 @@
   "dependencies" : {
     "redis": "0.6.7",
     "ua-parser": "0.2.3",
-    "hydna": ">=1.0.0",
+    "hydna": ">=1.0.3",
 		"uglify-js": ">=1.1.1",
 		"geoip": ">=0.4.4"
   },
@@ -25,6 +25,6 @@
 	},
 	"os": ["macos", "linux"],
 	"engines": {
-		"node": ">=0.5.9"
+		"node": ">=0.6.17"
 	}
 }
