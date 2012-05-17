@@ -1,5 +1,5 @@
 #!/bin/bash
-lib_path="public/tracker.js"
+lib_path="public/tracker.min.js"
 version="1"
 
 # don't edit below this line
