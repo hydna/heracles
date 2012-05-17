@@ -1,6 +1,6 @@
 {
 	"name": "heracles",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Tracking server for Atlas.io",
 	"keywords": ["heracles", "tracking"],
 	"homepage": "https://github.com/hydna/hermes",
