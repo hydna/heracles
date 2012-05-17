@@ -13,7 +13,7 @@
   var trackerurl;
   var info = {};
 
-  var SERVER = "127.0.0.1:8080";
+  var SERVER = "tracker.atlas.io";
   var TENYEARS = 1000 * 60 * 60 * 24 * 365 * 10;
   var SESSION_ID = "__aioid";
   var VISIT_ID = "__aiov";
@@ -28,12 +28,14 @@
   info.tz = (new Date()).getTimezoneOffset() / 60;
 
   // Find referrer
-	if (typeof parent !== "undefined" && parent.document.referrer != void(0)) {
-	  try { info.r = parent.document.referrer + "" } catch (e) {}
-	}
+  try {
+  	if (typeof parent !== "undefined" && parent.document.referrer != void(0)) {
+  	   info.r = parent.document.referrer + "";
+  	}
+  } catch (e) {}
 
 	if (info.r == "") {
-  	try { info.r = document.referrer + "" } catch (e) {}
+  	try { info.r = document.referrer + ""; } catch (e) {}
 	}
 
 	if (info.r == "blockedReferrer") {
@@ -43,17 +45,15 @@
   exports.init = function(id) {
     var protocol = document.location.protocol == "https:" && "https" || "http";
 
-    if (!id || /^AIO-([a-zA-Z0-9]{8,8})$/.test(id) == false) {
+    if (!id || /^[a-f0-9]{8,8}\-[a-f0-9]{4,4}\-[a-f0-9]{4,4}\-[a-f0-9]{4,4}\-[a-f0-9]{12,12}$/.test(id) == false) {
       return;
     }
 
     if (sessionid = getcookie(SESSION_ID)) {
       lastvisited = parseInt(getcookie(VISIT_ID) || 0);
-      console.log("existing session %s %s", sessionid, lastvisited)
     } else {
       sessionid = uuid();
       lastvisited = 0;
-      console.log("new session %s %s", sessionid, lastvisited)
     }
 
     trackerurl = protocol + "://" + SERVER + "/s/?_id=" + id;
@@ -169,7 +169,7 @@
 	  }
 
 	  setcookie(SESSION_ID, sessionid, TENYEARS);
-	  setcookie(VISIT_ID, (lastvisited = Date.now()), TENYEARS);
+	  setcookie(VISIT_ID, (lastvisited = (new Date()).getTime()), TENYEARS);
 	}
 
 	function onunload() {
