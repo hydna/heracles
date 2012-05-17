@@ -75,10 +75,13 @@ var workers             = {};
 
 
 // Internal constants
-var PIXEL               = new Buffer([47, 49, 46, 38, 39, 61, 01, 00, 01, 00,
-                                      80, 01, 00, ff, 00, 00, ff, ff, ff, 21,
-                                      f9, 04, 01, 00, 00, 01, 00, 2c, 00, 00,
-                                      00 00 01 00 01 00 00 02 02 44 01 00 3b]);
+var PIXEL               = new Buffer([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01,
+                                      0x00, 0x01, 0x00, 0x80, 0x01, 0x00, 0xff,
+                                      0x00, 0x00, 0xff, 0xff, 0xff, 0x21, 0xf9,
+                                      0x04, 0x01, 0x00, 0x00, 0x01, 0x00, 0x2c,
+                                      0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01,
+                                      0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00,
+                                      0x3b]);
 var VISIT_TIMEOUT       = 20 * 60000; // 20 min
 
 
