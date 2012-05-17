@@ -302,7 +302,6 @@ function sessionHandler (sites, sessions) {
       }
 
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Content-Type", "image/gif");
 
       return ok(req, res);
     }
