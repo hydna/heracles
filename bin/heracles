@@ -301,6 +301,8 @@ function sessionHandler (sites, sessions) {
         res.setHeader("Set-Cookie", session.getCookieString());
       }
 
+      res.setHeader("Access-Control-Allow-Origin", "*");
+
       return ok(req, res);
     }
 
