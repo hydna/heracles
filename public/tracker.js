@@ -1,17 +1,18 @@
 /*
- * Atlas.io Tracking Script v 0.9
+ * Atlas.io Tracking Script v 1.0
  * Based on quirksmode (quirksmode.com) browser detection, owa
  * (openwebanalytics.com) tracking scripts and swfobject flash and
  * quicktime detection based on (swfobject)
  */
 
-(function(exports) {
+(function() {
   var userAgent = navigator.userAgent;
   var unloaded = false;
   var sessionid;
   var lastvisited;
   var trackerurl;
   var info = {};
+  var startcommands;
 
   var SERVER = "tracker.atlas.io";
   var TENYEARS = 1000 * 60 * 60 * 24 * 365 * 10;
@@ -20,6 +21,12 @@
   var UUIDKEYS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
                  "abcdefghijklmnopqrstuvwxyz".split("");
 
+
+  if (typeof atlasio != "undefined") {
+    startcommands = atlasio;
+  }
+
+  var exports = window.atlasio = {};
 
   info.e = 1; // Extended? yes
   info.t = document.title || "Untitled";
@@ -68,6 +75,15 @@
 		}
 
 		window.onunload = window.onbeforeunload = onunload;
+  };
+
+  exports.push = function (args) {
+    var name;
+    if (!args.length || !args.shift) return;
+    name = args.shift();
+    try {
+      exports[name].apply(exports, args);
+    } catch (err) {}
   };
 
   exports.trackPageview = function() {
@@ -191,4 +207,19 @@
 	  }
 	}
 
-})(window.atlasio = {});
+
+  if (startcommands && startcommands.length) {
+    (function () {
+      var cmd;
+      var name;
+      for (var i = 0; i < startcommands.length; i++) {
+        cmd = startcommands[i];
+        name = cmd.shift();
+        try {
+          exports[name].apply(exports, cmd);
+        } catch (err) {
+        }
+      }
+    })();
+  }
+})();
