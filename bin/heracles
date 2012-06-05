@@ -66,7 +66,10 @@ var SWITCHES            = [
   [      "--tracker=PATH","Path to tracker-js, defaults to 'public/tracker.js"],
   [      "--name=NAME",   "Name of server"],
   [      "--geodb=PATH",  "Path to MaxMind geo ip database"],
-  [      "--id=ID",       "ID of server, if used in clusters"]
+  [      "--id=ID",       "ID of server, if used in clusters"],
+  [      "--key=PATH",    "TLS key"],
+  [      "--cert=PATH",   "TLS cert"],
+  [      "--tlsport=PORT","TLS Port"]
 ];
 
 var DEFAULT_SERVER_NAME = "heracles/" + require("../package.json").version;
@@ -97,12 +100,15 @@ function main () {
   var scriptpath;
   var lookupdb;
   var noworkers;
+  var servername;
+  var tlsopts;
   var sites;
   var worker;
   var parser;
   var opts;
   var port;
   var rpcport;
+  var tlsport;
 
   parser = createParser(SWITCHES, BANNER);
   opts = parser.parse(process.argv.slice(2));
@@ -131,8 +137,23 @@ function main () {
     return;
   }
 
+  if ("tlsport" in opts && (!(port = parseInt(opts.port)) || isNaN(port))) {
+    console.error("expected -- tlsport");
+    process.exit(1);
+    return;
+  }
+
   log.debugMode = "debug" in opts;
   log.silentMode = "silent" in opts;
+
+  servername = opts.name || DEFAULT_SERVER_NAME;
+
+  if (opts.key && opts.cert) {
+    tlsopts = {
+      key: resolve(opts.key),
+      cert: resolve(opts.cert)
+    }
+  }
 
   if (cluster.isMaster) {
 
@@ -148,7 +169,7 @@ function main () {
         throw new Error("Expected option 'rpcsecret' when RPC is enabled");
       }
 
-      dispatcher = createDispatcher(opts.name || DEFAULT_SERVER_NAME);
+      dispatcher = createDispatcher(servername, tlsopts);
       dispatcher.addHandler("/sites", sourceHandler(sitespath,
                                                       sites,
                                                       opts.rpcsecret));
@@ -213,11 +234,20 @@ function main () {
 
     sessions = createSessions(opts.id || "1", lookupdb);
 
-    dispatcher = createDispatcher(opts.name || DEFAULT_SERVER_NAME);
+    dispatcher = createDispatcher(servername);
     dispatcher.addHandler("/s", sessionHandler(sites, sessions));
     dispatcher.addHandler("/s/", sessionHandler(sites, sessions));
     dispatcher.addHandler("/t.js", scriptHandler(scriptpath));
     dispatcher.listen(port);
+
+
+    if (tlsopts && tlsport) {
+      dispatcher = createDispatcher(servername, tlsopts);
+      dispatcher.addHandler("/s", sessionHandler(sites, sessions));
+      dispatcher.addHandler("/s/", sessionHandler(sites, sessions));
+      dispatcher.addHandler("/t.js", scriptHandler(scriptpath));
+      dispatcher.listen(tlsport);
+    }
 
     process.on("message", function message(msg, handle) {
       switch (msg.cmd) {
