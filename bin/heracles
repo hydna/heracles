@@ -47,6 +47,7 @@ var log                 = require("../lib/log");
 var ok                  = require("../lib/helpers").ok;
 var notFound            = require("../lib/helpers").notFound;
 var badRequest          = require("../lib/helpers").badRequest;
+var notModified         = require("../lib/helpers").notModified;
 var file                = require("../lib/helpers").file;
 var methodNotAllowed    = require("../lib/helpers").methodNotAllowed;
 
@@ -72,7 +73,7 @@ var DEFAULT_SERVER_NAME = "heracles/" + require("../package.json").version;
 
 // Internal variables
 var workers             = {};
-
+var trackerCache        = {};
 
 // Internal constants
 var PIXEL               = new Buffer([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01,
@@ -151,6 +152,7 @@ function main () {
       dispatcher.addHandler("/sites", sourceHandler(sitespath,
                                                       sites,
                                                       opts.rpcsecret));
+      dispatcher.addHandler("/tracker-installed", trackerInstalledHandler());
       dispatcher.listen(rpcport);
     }
 
@@ -163,6 +165,7 @@ function main () {
 
     for (var i = 0; i < noworkers; i++) {
       worker = cluster.fork();
+      worker.on("message", workerMessageHandler);
       workers[worker.pid] = worker;
     }
 
@@ -182,6 +185,7 @@ function main () {
       var worker;
       delete workers[target.id];
       worker = cluster.fork();
+      worker.on("message", workerMessageHandler);
       workers[worker.pid] = worker;
     });
 
@@ -219,6 +223,9 @@ function main () {
       switch (msg.cmd) {
         case "source":
           sites.source(sitespath);
+          break;
+        case "tracker-installed":
+          sites.setTrackerInstalled(msg.uuid);
           break;
       }
     });
@@ -360,6 +367,43 @@ function sourceHandler (path, sites, secret) {
   };
 }
 
+
+function trackerInstalledHandler (path, sites, secret) {
+  return function (req, res) {
+    var query = req.query;
+
+    if (req.method !== "GET") {
+      return methodNotAllowed(req, res);
+    }
+
+    if (req.headers["x-token"] !== secret) {
+      return badRequest(req, res);
+    }
+
+    req.on("end", function () {
+
+      if (query.uuid in trackerCache) {
+        return ok(req, res);
+      } else {
+        return notModified(req, res);
+      }
+    });
+  };
+}
+
+
+function workerMessageHandler (msg, handle) {
+  switch (msg.cmd) {
+    case "tracker-installed":
+      trackerCache[msg.uuid] = 1;
+      for (var id in workers) {
+        if (workers[id] !== this) {
+          workers[id].send({ cmd: "tracker-installed", uuid: msg.uuid });
+        }
+      }
+      break;
+  }
+}
 
 if (require.main == module) {
   main();
