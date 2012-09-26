@@ -176,11 +176,12 @@
 	             "XMLHttpRequest" in window) {
 			var request;
 			request = new XMLHttpRequest();
-			request.open("GET", url, false);
+			request.open("GET", url, true);
 			request.send(null);
 	  } else {
 			var script = document.createElement('script');
 			script.setAttribute('src', url);
+            script.async = true;
 			document.getElementsByTagName('head')[0].appendChild(script);
 	  }
 
