@@ -139,11 +139,12 @@
 
 	function setcookie(name, value, expires) {
 	  var cookieval = name + "=" + value;
+      var now = (Date.now?Date.now():(new Date()).valueOf());
 
-		if (expires) {
-			var date = new Date(Date.now() + expires);
-			cookieval += "; expires=" + date.toGMTString();
-		}
+      if (expires) {
+        var date = new Date(now + expires);
+        cookieval += "; expires=" + date.toGMTString();
+      }
 
 		document.cookie = cookieval + "; path=/";
 	}

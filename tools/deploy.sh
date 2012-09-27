@@ -1,6 +1,6 @@
 #!/bin/bash
 lib_path="public/tracker.min.js"
-version="1"
+version="2"
 
 # don't edit below this line
 
@@ -27,8 +27,8 @@ function putfile() {
 auth_server="https://lon.auth.api.rackspacecloud.com/v1.0"
 
 data=`curl -s -f -D - \
-           -H "X-Auth-Key: $CDN_API_KEY" \
            -H "X-Auth-User: $CDN_API_USER" \
+           -H "X-Auth-Key: $CDN_API_KEY" \
            $auth_server`
 token=`echo "$data" | grep "X-Auth-Token:" | awk '{print $2}'`
 storage=`echo "$data" | grep "X-Storage-Url:" | awk '{print $2}' | tr -d '\r'`
